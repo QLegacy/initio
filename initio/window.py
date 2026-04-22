@@ -1,8 +1,12 @@
 import os
 import subprocess
 import shutil
+import sys
 from Xlib import display, X, error, protocol, XK
+# Апплет настроек что бы протестировать кривой тайлинг
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from applet.settings import open_settings, load_config
 TITLEBAR_HEIGHT = 25
 BORDER_WIDTH = 3
 FRAME_COLOR = 0x2c3e50
@@ -25,7 +29,7 @@ class InitioWM:
         self.resize_window = None
         self.resize_start_geom = None
         self.resize_edge = None
-
+        self.config = load_config()
         font = self.display.open_font('cursor')
         self.cursor_resize = font.create_glyph_cursor(font, 120, 121, (0, 0, 0), (65535, 65535, 65535))
         
@@ -85,7 +89,7 @@ class InitioWM:
                     if state['app'] == ev.window:
                         self.destroy_frame(self.display.create_resource_object('window', fid))
                         break
-
+            
             elif ev.type == X.MapRequest:
                 self.decorate_and_map(ev.window)
 
@@ -125,7 +129,9 @@ class InitioWM:
                         self.resize_start_geom = (ev.root_x, ev.root_y, geom.width, geom.height, geom.x, geom.y)
                         ev.window.grab_pointer(True, X.PointerMotionMask | X.ButtonReleaseMask, X.GrabModeAsync, X.GrabModeAsync, X.NONE, self.cursor_resize, X.CurrentTime)
                         continue
-                
+                if ev.window.id == self.settings_btn.id:
+                    open_settings(self)
+                    continue
                 if ev.window.id in self.taskbar_buttons:
                     data = self.taskbar_buttons[ev.window.id]
                     frame_to_restore = data['frame']
@@ -176,7 +182,20 @@ class InitioWM:
             elif ev.type == X.MotionNotify:
                 if self.drag_window:
                     dx, dy = ev.root_x - self.drag_start[0], ev.root_y - self.drag_start[1]
-                    self.drag_window.configure(x=self.drag_window_start_pos[0] + dx, y=self.drag_window_start_pos[1] + dy)
+                    nx, ny = self.drag_window_start_pos[0] + dx, self.drag_window_start_pos[1] + dy
+                    
+                    # магнит
+                    snap_dist = 40
+                    # Края экрана
+                    if abs(nx) < snap_dist: nx = 0
+                    if abs(nx + self.drag_window.get_geometry().width - self.screen.width_in_pixels) < snap_dist:
+                        nx = self.screen.width_in_pixels - self.drag_window.get_geometry().width
+                    
+                    # Панель
+                    if abs(ny + self.drag_window.get_geometry().height - self.screen.height_in_pixels + PANEL_HEIGHT) < snap_dist:
+                        ny = self.screen.height_in_pixels - PANEL_HEIGHT - self.drag_window.get_geometry().height
+                    
+                    self.drag_window.configure(x=nx, y=ny)
                 elif self.resize_window and self.resize_edge:
                     dx, dy = ev.root_x - self.resize_start_geom[0], ev.root_y - self.resize_start_geom[1]
                     sw, sh, sx, sy = self.resize_start_geom[2], self.resize_start_geom[3], self.resize_start_geom[4], self.resize_start_geom[5]
@@ -193,15 +212,25 @@ class InitioWM:
                     self.update_buttons_pos(self.resize_window.id, nw)
 
             elif ev.type == X.ButtonRelease:
+                if self.drag_window:
+                    self.handle_snap_and_swap(self.drag_window) # Чекнем надо ли поменять окна местами
+                    self.display.ungrab_pointer(X.CurrentTime)
+                    self.drag_window = None
                 if self.resize_window or self.drag_window:
                     self.display.ungrab_pointer(X.CurrentTime)
                     self.resize_window = self.drag_window = None
+                
 
     def create_panel(self):
         panel = self.root.create_window(0, self.screen.height_in_pixels - PANEL_HEIGHT, self.screen.width_in_pixels, PANEL_HEIGHT, 0, self.screen.root_depth, X.InputOutput, X.CopyFromParent, background_pixel=0x1a1a1a, event_mask=X.ButtonPressMask | X.ExposureMask)
         self.ini_btn = panel.create_window(5, 5, 60, 30, 0, self.screen.root_depth, X.InputOutput, X.CopyFromParent, background_pixel=0x3498db, event_mask=X.ButtonPressMask)
         panel.map()
         self.ini_btn.map()
+        
+        self.settings_btn = panel.create_window(70, 5, 80, 30, 0, self.screen.root_depth, 
+                                                X.InputOutput, X.CopyFromParent, 
+                                                background_pixel=0x2ecc71, event_mask=X.ButtonPressMask)
+        self.settings_btn.map()
         return panel
 
     def set_system_cursor(self):
@@ -232,13 +261,32 @@ class InitioWM:
     def update_buttons_pos(self, frame_id, new_width):
         if frame_id in self.managed_windows:
             btns = self.managed_windows[frame_id]['btns']
-            btns['close'].configure(x=new_width - 45)
-            btns['max'].configure(x=new_width - 85)
-            btns['min'].configure(x=new_width - 110)
+            # Если окно узкое, пытаемся вместить кнопки
+            if new_width < 120:
+                btns['close'].configure(x=max(10, new_width - 45))
+                btns['max'].unmap() # скрываем если места нет
+                btns['min'].unmap()
+            else:
+                btns['close'].map()
+                btns['max'].map()
+                btns['min'].map()
+                btns['close'].configure(x=new_width - 45)
+                btns['max'].configure(x=new_width - 85)
+                btns['min'].configure(x=new_width - 110)
 
     def decorate_and_map(self, window):
         try:
             attr = window.get_attributes()
+            if attr.override_redirect:
+                window.map()
+                return
+
+            try:
+                name = window.get_wm_name()
+                if name and "rofi" in name.lower():
+                    window.map()
+                    return
+            except: pass
             if attr.override_redirect:
                 window.map()
                 return
@@ -257,6 +305,9 @@ class InitioWM:
                 return b
 
             self.managed_windows[frame.id] = {'app': window, 'maximized': False, 'geom': geom, 'frame_geom': None, 'btns': {'close': make_btn(fw-45, 40, 0xe74c3c, 'close'), 'max': make_btn(fw-85, 35, 0x95a5a6, 'maximize'), 'min': make_btn(fw-110, 20, 0xbdc3c7, 'minimize')}}
+            if self.config.get("tiling"):
+                self.apply_tiling()
+                
             self.panel.configure(stack_mode=X.Above)
         except error.BadWindow: pass
     
@@ -267,6 +318,47 @@ class InitioWM:
     def run(self):
         self.spawn_terminal()
         while True: self.display.next_event()
-
+    # Тайлинг
+    def apply_tiling(self):
+        windows = [win for win in self.managed_windows.items() if not win[1]['maximized']]
+        count = len(windows)
+        if count == 0: return
+        for fid, state in self.managed_windows.items():
+            frame = self.display.create_resource_object('window', fid)
+            # очистка и перерендер кнопок
+            for btn in state['btns'].values():
+                btn.clear_area(0, 0, 0, 0, True)
+            self.update_buttons_pos(fid, frame.get_geometry().width)
+        w_width = self.screen.width_in_pixels // count
+        for i, (fid, state) in enumerate(windows):
+            frame = self.display.create_resource_object('window', fid)
+            
+            # применение новыъх размеров
+            frame.configure(x=i * w_width, y=0, width=w_width, height=self.screen.height_in_pixels - PANEL_HEIGHT)
+            state['app'].configure(width=w_width - BORDER_WIDTH*2, 
+                                   height=self.screen.height_in_pixels - PANEL_HEIGHT - TITLEBAR_HEIGHT - BORDER_WIDTH*2)
+            
+            # тут вызываем обновление кнопок, чтобы они пересчитали положение под новую ширину
+            self.update_buttons_pos(fid, w_width)
+    def handle_snap_and_swap(self, frame_win):
+        if self.config.get("tiling"): # ТОЛЬКО если тайлинг включен
+            geom = frame_win.get_geometry()
+        for fid, state in self.managed_windows.items():
+            if fid == frame_win.id: continue
+            other_frame = self.display.create_resource_object('window', fid)
+            og = other_frame.get_geometry()
+            
+            # Это если центр нашего окна попал в область другого окна
+            if (geom.x + geom.width//2) > og.x and (geom.x + geom.width//2) < (og.x + og.width):
+                # Меняем местами в словаре (сортируем по ключам для применения тайлинга)
+                keys = list(self.managed_windows.keys())
+                idx1, idx2 = keys.index(frame_win.id), keys.index(fid)
+                keys[idx1], keys[idx2] = keys[idx2], keys[idx1]
+                
+                new_managed = {k: self.managed_windows[k] for k in keys}
+                self.managed_windows = new_managed
+                self.apply_tiling()
+                break
+            self.apply_tiling()
 if __name__ == "__main__":
     InitioWM().run()
