@@ -1,4 +1,8 @@
 # Initio Display Manager
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
+![X11](https://img.shields.io/badge/X11-window_manager-orange)
+[![License](https://img.shields.io/github/license/QLegacy/initio)](https://github.com/qlegacy/initio/blob/main/LICENSE)
+[![Telegram](https://img.shields.io/badge/Telegram-write_me-26A5E4?logo=telegram&logoColor=white)](https://t.me/qlsur)
 
 Initio — это минималистичный оконный менеджер для X11, полностью написанный на Python. Проект предоставляет базовый экран входа в систему (GUI) и простую среду рабочего стола с панелью задач и управлением окнами.
 
