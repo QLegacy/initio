@@ -2,7 +2,6 @@
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?logo=python&logoColor=white)
 ![X11](https://img.shields.io/badge/X11-window_manager-orange)
 ![Tk](https://img.shields.io/badge/GUI-Tkinter-blue)
-[![Telegram](https://img.shields.io/badge/Telegram-write_me-26A5E4?logo=telegram&logoColor=white)](https://t.me/qlsur)
 <br>
 [![License](https://img.shields.io/github/license/QLegacy/initio)](https://github.com/qlegacy/initio/blob/main/LICENSE)
 ![Stars](https://img.shields.io/github/stars/QLegacy/initio?style=flat)
@@ -11,7 +10,6 @@
 ![Platform](https://img.shields.io/badge/platform-Linux-FCC624?logo=linux&logoColor=black)
 ![Arch](https://img.shields.io/badge/Arch_Linux-supported-1793D1?logo=archlinux&logoColor=white)
 ![Debian](https://img.shields.io/badge/Debian%2FUbuntu-supported-A81D33?logo=debian&logoColor=white)
-![Status](https://img.shields.io/badge/status-experimental-yellow)
 Initio — это минималистичный оконный менеджер для X11, полностью написанный на Python. Проект предоставляет базовый экран входа в систему (GUI) и простую среду рабочего стола с панелью задач и управлением окнами.
 
 ## 🚀 Имеет
